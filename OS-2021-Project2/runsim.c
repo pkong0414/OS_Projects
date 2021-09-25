@@ -55,11 +55,11 @@ int main( int argc, char* argv[]){
         }
     } /* END OF GETOPT */
 
-    // attaching shared memory now!
     if( (id = shmget(IPC_PRIVATE, sizeof(int), PERM)) == -1){
         perror("Failed to create shared memory segment\n");
         return 1;
     }
+    // created shared memory segment!
 
     if((sharedTotal = (int *)shmat(id, NULL, 0)) == (void *)-1){
         perror("Failed to attach shared memory segment\n");
@@ -68,6 +68,8 @@ int main( int argc, char* argv[]){
         }
         return 1;
     }
+    // attached shared memory
+
 
     if((childPid = fork()) == -1){
         perror("Failed to create child process\n");
@@ -79,13 +81,12 @@ int main( int argc, char* argv[]){
 
     if(childPid > 0){
         printf("a child process has been created\n");
+        printf("my Pid is: %d\n", childPid);
+        return 0;
     }
-
+    // made a child process!
     if((waitId = wait(NULL)) == -1)
         perror("Failed to wait for child\n");
-    else {
-
-    }
 
     if(detachandremove(id, sharedTotal) == -1){
         perror("Failed to destroy shared memory segment");
