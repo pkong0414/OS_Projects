@@ -1,5 +1,6 @@
 //runsim.c
 
+#include <ctype.h>
 #include <errno.h>
 #include <unistd.h>
 #include <stdbool.h>
@@ -14,7 +15,7 @@
 int main( int argc, char* argv[]){
 
     int opt, timer, nValue;     //This is for managing our getopts
-    int childPid, id;           //This is for managing our processes
+    int childPid, id, waitId;           //This is for managing our processes
     int *sharedTotal;           //This is for managing our sharedMemory
 
     while((opt = getopt(argc, argv, "hn:")) != -1) {
@@ -37,7 +38,7 @@ int main( int argc, char* argv[]){
                     nValue = atoi(optarg);
                     //timeValue cannot have a value of 0. This will prevent that case.
                     if (nValue < 1) {
-                        printf("$s: nValue cannot be less than 1.\n", argv[0]);
+                        printf("%s: nValue cannot be less than 1.\n", argv[0]);
                         nValue = 1;
                     }
                     else if (nValue > 20) {
@@ -80,8 +81,11 @@ int main( int argc, char* argv[]){
         printf("a child process has been created\n");
     }
 
-    if(r_wait(NULL) == -1)
+    if((waitId = wait(NULL)) == -1)
         perror("Failed to wait for child\n");
+    else {
+
+    }
 
     if(detachandremove(id, sharedTotal) == -1){
         perror("Failed to destroy shared memory segment");

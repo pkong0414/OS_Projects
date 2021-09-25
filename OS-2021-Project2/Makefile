@@ -11,8 +11,11 @@ OBJ = runsim.o detachandremove.o
 
 all: $(TARGETS)
 
-obj: $(SRC)
+$(OBJ): $(SRC)
 	$(CC) -c $(SRC)
+
+runsim: $(OBJ)
+	$(CC) -o $@ $(OBJ)
 
 clean:
 	/bin/rm '-f' *.o $(TARGETS) *.data
