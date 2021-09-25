@@ -52,5 +52,40 @@ int main( int argc, char* argv[]){
                 fprintf(stderr, "Usage: %s [-h] [-n number of processes]\n", argv[0]);
                 exit(EXIT_FAILURE);
         }
+    } /* END OF GETOPT */
+
+    // attaching shared memory now!
+    if( (id = shmget(IPC_PRIVATE, sizeof(int), PERM)) == -1){
+        perror("Failed to create shared memory segment\n");
+        return 1;
     }
+
+    if((sharedTotal = (int *)shmat(id, NULL, 0)) == (void *)-1){
+        perror("Failed to attach shared memory segment\n");
+        if(shmctl(id, IPC_RMID, NULL) == -1){
+            perror("Failed to remove memory segment\n");
+        }
+        return 1;
+    }
+
+    if((childPid = fork()) == -1){
+        perror("Failed to create child process\n");
+        if(detachandremove(id, sharedTotal) == -1){
+            perror("Failed to destroy shared memory segment");
+        }
+        return 1;
+    }
+
+    if(childPid > 0){
+        printf("a child process has been created\n");
+    }
+
+    if(r_wait(NULL) == -1)
+        perror("Failed to wait for child\n");
+
+    if(detachandremove(id, sharedTotal) == -1){
+        perror("Failed to destroy shared memory segment");
+        return 1;
+    }
+    return 0;
 }
