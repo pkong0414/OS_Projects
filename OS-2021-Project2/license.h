@@ -6,10 +6,10 @@
 typedef struct license
 {
 
+    int id;
 
 
-
-};
+}licenseData;
 
 // functions
 

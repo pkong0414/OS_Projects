@@ -4,13 +4,15 @@
 CC = gcc
 CFLAGS = -I. -g
 TARGETS = runsim testsim
-RUNSIM = runsim license.h
-TESTSIM = testsim
-SRC =
-SRC2 =
+RUNSIM = runsim.c license.h detachandremove.c
+TESTSIM = testsim.c
+SRC = runsim.c detachandremove.c
+OBJ = runsim.o detachandremove.o
 
 all: $(TARGETS)
-r: ${(RUNSIM)
-t: $(TESTSIM)
 
+obj: $(SRC)
+	$(CC) -c $(SRC)
 
+clean:
+	/bin/rm '-f' *.o $(TARGETS) *.data
