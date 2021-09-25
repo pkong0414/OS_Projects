@@ -1,18 +1,18 @@
 // license.h
 
+#include <signal.h>
+#include "config.h"
+
 #ifndef LICENSE_H
 #define LICENSE_H
 
-typedef struct license
-{
 
-    int id;
-
-
-}licenseData;
+typedef struct license {
+    sig_atomic_t ready;   //This is the active processes
+    int* nlicense;              //This will be given to each
+} licenseList;
 
 // functions
-
 int getlicense(void);           //Blocks until a license is available
 int returnlicense(void);        //Increments the number of avail license object
 int initlicense(void);          //Performs any needed initialization of the license object

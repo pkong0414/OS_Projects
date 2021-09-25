@@ -38,12 +38,12 @@ int main( int argc, char* argv[]){
                     nValue = atoi(optarg);
                     //timeValue cannot have a value of 0. This will prevent that case.
                     if (nValue < 1) {
-                        printf("%s: nValue cannot be less than 1.\n", argv[0]);
+                        printf("%s: processes cannot be less than 1.\n", argv[0]);
                         nValue = 1;
                     }
-                    else if (nValue > 20) {
-                        printf("%s: nValue cannot exceed 20.\n", argv[0]);
-                        nValue = 20;
+                    else if (nValue > 19) {
+                        printf("%s: number of processes cannot exceed 20.\n", argv[0]);
+                        nValue = 19;
                     }
                     printf("nValue: %d\n", nValue);
                     break;
@@ -60,6 +60,7 @@ int main( int argc, char* argv[]){
         return 1;
     }
     // created shared memory segment!
+    printf("created shared memory!\n");
 
     if((sharedTotal = (int *)shmat(id, NULL, 0)) == (void *)-1){
         perror("Failed to attach shared memory segment\n");
@@ -69,6 +70,7 @@ int main( int argc, char* argv[]){
         return 1;
     }
     // attached shared memory
+    printf("attached shared memory\n");
 
 
     if((childPid = fork()) == -1){
@@ -79,18 +81,23 @@ int main( int argc, char* argv[]){
         return 1;
     }
 
-    if(childPid > 0){
-        printf("a child process has been created\n");
-        printf("my Pid is: %d\n", childPid);
-        return 0;
+    if(childPid == 0){
+        /* the child process */
+        *sharedTotal = 123;
+        exit(EXIT_SUCCESS);
     }
     // made a child process!
-    if((waitId = wait(NULL)) == -1)
+    if((waitId = wait(NULL)) == -1) {
         perror("Failed to wait for child\n");
+    } else {
+        printf("successfully waited for child process!\n");
+    }
 
     if(detachandremove(id, sharedTotal) == -1){
         perror("Failed to destroy shared memory segment");
         return 1;
+    } else {
+        printf("Memory segment detached!\n");
     }
     return 0;
 }
