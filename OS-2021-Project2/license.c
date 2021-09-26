@@ -8,7 +8,7 @@ int getlicense(void){
 }
 
 int returnlicense(void){
-
+    return nlicense;
 }
 
 int initlicense(void){
@@ -16,11 +16,11 @@ int initlicense(void){
 }
 
 void addtolicenses(int n){
-
+    nlicense++;
 }
 
 void removelicenses(int n){
-
+    nlicense--;
 }
 
 void logmsg(const char* msg){

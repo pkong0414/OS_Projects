@@ -10,13 +10,43 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include "detachandremove.h"
+#include "license.h"
 #define PERM (S_IRUSR | S_IWUSR)
+
+#define MAX_CANON 13
+
+/* THINGS TO DO:
+ *
+ * We need a signal interrupt [ctrl+c]
+ *
+ * We also need to program a program timer. Default value is 100. Once the time is up,
+ * the whole program shuts off no matter what
+ *
+ * NOTE: Both should detach memory and kill all the processes and end the program accordingly.
+ */
+
+licenseList *licenses = NULL;                       //This is our shared heap for licenses
 
 int main( int argc, char* argv[]){
 
-    int opt, timer, nValue;     //This is for managing our getopts
-    int childPid, id, waitId;           //This is for managing our processes
-    int *sharedTotal;           //This is for managing our sharedMemory
+    int opt, timer, nValue;                 //This is for managing our getopts
+    int childPid, id, waitId;               //This is for managing our processes
+    int *sharedTotal;                       //This is for managing our sharedMemory
+
+    char docommand[MAX_CANON];
+
+    do{
+        //We'll be using fgets() for our stdin. "testing.data" is what we will be receiving from.
+        fgets(docommand, MAX_CANON, stdin);
+
+        //printing debugging output for fgets received.
+        printf("%s", docommand);
+
+        //clearing the buffer
+        docommand[0] = '\0';
+    }while(!feof(stdin));
+    // Getting a new line after reading file
+    printf("\n");
 
     while((opt = getopt(argc, argv, "hn:")) != -1) {
         switch (opt) {
@@ -24,7 +54,7 @@ int main( int argc, char* argv[]){
                 //This is the help parameter. We'll be printing out what this program does and will end the program.
                 //If this is entered along with others, we'll ignore the rest of the other parameters to print help
                 //and end the program accordingly.
-                printf("Usage: %s [-h] [-n processes(MAX 20)]\n", argv[0]);
+                printf("Usage: %s [-h] [-n processes(MAX 20)] < testing.data\n", argv[0]);
                 printf("This program is a license manager\n");
                 exit(EXIT_SUCCESS);
             case 'n':
@@ -55,10 +85,13 @@ int main( int argc, char* argv[]){
         }
     } /* END OF GETOPT */
 
-    if( (id = shmget(IPC_PRIVATE, sizeof(int), PERM)) == -1){
+    if( (id = shmget(IPC_PRIVATE, sizeof(struct licenseList), PERM)) == -1){
         perror("Failed to create shared memory segment\n");
         return 1;
     }
+
+    //********************* SHARED MEMORY PORTION ************************
+
     // created shared memory segment!
     printf("created shared memory!\n");
 
@@ -73,6 +106,9 @@ int main( int argc, char* argv[]){
     printf("attached shared memory\n");
 
 
+    //********************* SHARED MEMORY PORTION ************************
+
+
     if((childPid = fork()) == -1){
         perror("Failed to create child process\n");
         if(detachandremove(id, sharedTotal) == -1){
@@ -83,6 +119,7 @@ int main( int argc, char* argv[]){
 
     if(childPid == 0){
         /* the child process */
+
         *sharedTotal = 123;
         exit(EXIT_SUCCESS);
     }

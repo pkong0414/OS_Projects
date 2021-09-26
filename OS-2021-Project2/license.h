@@ -8,9 +8,11 @@
 
 
 typedef struct license {
-    sig_atomic_t ready;   //This is the active processes
-    int* nlicense;              //This will be given to each
+    sig_atomic_t ready;         //This is the active processes
+    int *nlicense;              //This will be given to each
 } licenseList;
+
+licenseList *license;
 
 // functions
 int getlicense(void);           //Blocks until a license is available
