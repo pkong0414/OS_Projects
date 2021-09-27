@@ -18,9 +18,8 @@
 #define MAX_CANON 13
 
 // FUNCTION PROTOTYPES
-void docommand(char *);                             //This function will perform the exec calls
 void initShm(key_t myKey);                          //This function will initialize shared memory.
-void license_manager( const int i );                //this function will manage the giving and receiving of licenses.
+void docommand( const int i );                      //This function will manage the giving and receiving of licenses.
 void critical_section();                            //This helper function will operate the critical section.
 void createChildren(int);                           //This function will create the children processes from main process
 void createGranChildren();                          //This function will be doing the exec functions.
@@ -47,15 +46,9 @@ sharedMem *sharedHeap;                              //shared memory object
 
 
 int main( int argc, char* argv[]){
-
     //gonna make a signal interrupt here just to see what happens
 
-
     char command[MAX_CANON];
-
-    initShm(myKey);
-    initlicense(sharedHeap);
-    addtolicenses(sharedHeap, nValue);
 
     do{
         //We'll be using fgets() for our stdin. "testing.data" is what we will be receiving from.
@@ -108,6 +101,11 @@ int main( int argc, char* argv[]){
         }
     } /* END OF GETOPT */
 
+    // Parsing is finished, now we are allocating and adding to licenses
+    initShm(myKey);
+    initlicense(sharedHeap);
+    addtolicenses(sharedHeap, nValue);
+
     //creating child processes
     createChildren(nValue);
 
@@ -121,10 +119,6 @@ int main( int argc, char* argv[]){
     }
 
     return 0;
-}
-
-void docommand(char *execCommand){
-
 }
 
 void initShm(key_t myKey){
@@ -160,14 +154,14 @@ void initShm(key_t myKey){
 
 }
 
-void license_manager(const int i){
+void docommand(const int i){
     //This function will use getlicense() to gather an idea of how many nlicenses are around.
     //If there are 0 then we be blocking until it is ok to receive a license.
 
     //We'll be following Bakery's Algo for this one
     int j;
 
-    if( getlicense(sharedHeap) == 0 ) {
+    if( getlicense(sharedHeap) == 1 ) {
         do {
             sharedHeap->choosing[i] = 1;
             sharedHeap->number[i] = 1 + sharedHeap->number[max(sharedHeap->number, MAX_PROC)];
@@ -230,12 +224,14 @@ void createChildren( int children ){
         // made a child process!
         if (childPid == 0) {
             /* the child process */
-            myID = totalProcessesCreated % 20;
+            myID = totalProcessesCreated;                               //assuming at max I will create 20 procs for now
+
+            //debugging output
             printf("current concurrent process %d: myPID: %ld\n", currentConcurrentProcesses, (long) getpid());
             printf("number of children allowed to make: %d\n", children);
 
-            //calling the license_manager to handle everything.
-            license_manager(myID);
+            //calling the docommand to handle the licensing and bakery's algo.
+            docommand(myID);
 
             exit(EXIT_SUCCESS);
         } else {
