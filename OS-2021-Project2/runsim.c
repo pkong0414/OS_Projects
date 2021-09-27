@@ -6,14 +6,23 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <signal.h>
+#include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include "detachandremove.h"
 #include "license.h"
-#define PERM (S_IRUSR | S_IWUSR)
+#define PERM (IPC_CREAT | S_IRUSR | S_IWUSR)
 
 #define MAX_CANON 13
+
+// FUNCTION PROTOTYPES
+void docommand(char *);                             //This function will perform the exec calls
+void initShm(key_t myKey);                          //This function will initialize shared memory.
+void getShmKey();                                   //This will get us our shared memory key.
+void createChildren(int);                           //This function will create the children processes from main process
+void createGranChildren();                          //This function will be doing the exec functions.
 
 /* THINGS TO DO:
  *
@@ -25,26 +34,32 @@
  * NOTE: Both should detach memory and kill all the processes and end the program accordingly.
  */
 
-licenseList *licenses = NULL;                       //This is our shared heap for licenses
+// GLOBALS
+int opt, timer, nValue;                             //This is for managing our getopts
+int currentConcurrentProcesses = 1;                 //Initialized as 1 since the main program is also a process.
+int childPid, id, waitStatus;                       //This is for managing our processes
+key_t myKey;                                        //Shared memory key
+sharedMem *sharedHeap;
 
 int main( int argc, char* argv[]){
 
-    int opt, timer, nValue;                 //This is for managing our getopts
-    int childPid, id, waitId;               //This is for managing our processes
-    int *sharedTotal;                       //This is for managing our sharedMemory
+    //gonna make a signal interrupt here just to see what happens
 
-    char docommand[MAX_CANON];
+
+    char command[MAX_CANON];
+    //*nlicense = 5;
 
     do{
         //We'll be using fgets() for our stdin. "testing.data" is what we will be receiving from.
-        fgets(docommand, MAX_CANON, stdin);
+        fgets(command, MAX_CANON, stdin);
 
         //printing debugging output for fgets received.
-        printf("%s", docommand);
+        printf("%s", command);
 
         //clearing the buffer
-        docommand[0] = '\0';
+        command[0] = '\0';
     }while(!feof(stdin));
+
     // Getting a new line after reading file
     printf("\n");
 
@@ -71,9 +86,9 @@ int main( int argc, char* argv[]){
                         printf("%s: processes cannot be less than 1.\n", argv[0]);
                         nValue = 1;
                     }
-                    else if (nValue > 19) {
-                        printf("%s: number of processes cannot exceed 20.\n", argv[0]);
-                        nValue = 19;
+                    else if (nValue >= MAX_PROC) {
+                        printf("%s: 20 is the max number of process.\n", argv[0]);
+                        nValue = MAX_PROC-1;
                     }
                     printf("nValue: %d\n", nValue);
                     break;
@@ -85,56 +100,101 @@ int main( int argc, char* argv[]){
         }
     } /* END OF GETOPT */
 
-    if( (id = shmget(IPC_PRIVATE, sizeof(struct licenseList), PERM)) == -1){
-        perror("Failed to create shared memory segment\n");
-        return 1;
-    }
+    //creating child processes
+    createChildren( 1 );
 
-    //********************* SHARED MEMORY PORTION ************************
+    //detaching shared memory
 
-    // created shared memory segment!
-    printf("created shared memory!\n");
-
-    if((sharedTotal = (int *)shmat(id, NULL, 0)) == (void *)-1){
-        perror("Failed to attach shared memory segment\n");
-        if(shmctl(id, IPC_RMID, NULL) == -1){
-            perror("Failed to remove memory segment\n");
-        }
-        return 1;
-    }
-    // attached shared memory
-    printf("attached shared memory\n");
-
-
-    //********************* SHARED MEMORY PORTION ************************
-
-
-    if((childPid = fork()) == -1){
-        perror("Failed to create child process\n");
-        if(detachandremove(id, sharedTotal) == -1){
-            perror("Failed to destroy shared memory segment");
-        }
-        return 1;
-    }
-
-    if(childPid == 0){
-        /* the child process */
-
-        *sharedTotal = 123;
-        exit(EXIT_SUCCESS);
-    }
-    // made a child process!
-    if((waitId = wait(NULL)) == -1) {
-        perror("Failed to wait for child\n");
-    } else {
-        printf("successfully waited for child process!\n");
-    }
-
-    if(detachandremove(id, sharedTotal) == -1){
+    if(detachandremove(id, sharedHeap) == -1){
         perror("Failed to destroy shared memory segment");
-        return 1;
+        exit(EXIT_FAILURE);
     } else {
         printf("Memory segment detached!\n");
     }
+
     return 0;
+}
+
+void docommand(char *execCommand){
+
+}
+
+void initShm(key_t myKey){
+    //********************* SHARED MEMORY PORTION ************************
+
+    if((myKey = ftok(".",1)) == (key_t)-1){
+        //if we fail to get our key.
+        fprintf(stderr, "Failed to derive key from filename:\n");
+        exit(EXIT_FAILURE);
+    }
+    printf("derived key from, myKey: %d\n", myKey);
+
+    if( (id = shmget(myKey, sizeof(sharedMem), PERM)) == -1){
+        perror("Failed to create shared memory segment\n");
+        exit(EXIT_FAILURE);
+    } else {
+        // created shared memory segment!
+        printf("created shared memory!\n");
+
+        if ((sharedHeap = (sharedMem *) shmat(id, NULL, 0)) == (void *) -1) {
+            perror("Failed to attach shared memory segment\n");
+            if (shmctl(id, IPC_RMID, NULL) == -1) {
+                perror("Failed to remove memory segment\n");
+            }
+            exit(EXIT_FAILURE);
+        }
+        // attached shared memory
+        printf("attached shared memory\n");
+    }
+
+
+    //****************** END SHARED MEMORY PORTION ***********************
+
+}
+
+void createChildren( int children ){
+    int ticket;
+    //initlicense();
+    while( (currentConcurrentProcesses <= nValue) ) {
+
+        if ((childPid = fork()) == -1) {
+            perror("Failed to create child process\n");
+            if (detachandremove(id, sharedHeap) == -1) {
+                perror("Failed to destroy shared memory segment");
+            }
+            exit(EXIT_FAILURE);
+        }
+
+        currentConcurrentProcesses++;
+        children--;
+
+        initShm(myKey);
+
+        // made a child process!
+        if (childPid == 0) {
+            /* the child process */
+            int myId = children;                   //This will be its index in the queue line.
+            printf("ChildProcess %d: myPID: %ld\n", currentConcurrentProcesses, (long) getpid());
+            printf("number of children allowed to make: %d\n", children);
+            exit(EXIT_SUCCESS);
+        } else {
+            /* the parent process */
+
+            // waiting for the child process
+            if ((waitStatus = wait(NULL)) == -1) {
+                perror("Failed to wait for child\n");
+            } else {
+                printf("successfully waited for child process!\n");
+            }
+
+            if( children == 0 ){
+                break;
+            }
+        }
+    }
+
+}
+
+void createGrandChildren(){
+
 }

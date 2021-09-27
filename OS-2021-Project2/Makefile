@@ -22,4 +22,4 @@ testsim: $(OBJ2)
 	$(CC) -o $@ $^
 
 clean:
-	/bin/rm '-f' *.o $(TARGETS) *.data
+	/bin/rm '-f' *.o $(TARGETS)

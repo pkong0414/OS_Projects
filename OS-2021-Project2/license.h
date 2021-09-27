@@ -1,18 +1,19 @@
 // license.h
 
+#include <stdio.h>
 #include <signal.h>
 #include "config.h"
 
 #ifndef LICENSE_H
 #define LICENSE_H
 
-
-typedef struct license {
+typedef struct sharedMemory {
+    int waitQueue[MAX_PROC];    //This will be the queue for the processes
     sig_atomic_t ready;         //This is the active processes
-    int *nlicense;              //This will be given to each
-} licenseList;
+    int nlicense;               //This is license object. This is the critical section object
+} sharedMem;
 
-licenseList *license;
+extern sharedMem *sharedHeap;
 
 // functions
 int getlicense(void);           //Blocks until a license is available
