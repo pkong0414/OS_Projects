@@ -36,13 +36,6 @@ int max(int numArr[], int n);
  * NOTE: Both should detach memory and kill all the processes and end the program accordingly.
  */
 
-// shared memory struct
-typedef struct sharedMemory {
-    bool choosing[MAX_PROC];                            //This will be the queue for the processes.
-    int number[MAX_PROC];                           //This is the current turn of the waiting line.
-} sharedMem;
-
-
 // GLOBALS
 enum state{idle, want_in, in_cs};
 int opt, timer, nValue;                             //This is for managing our getopts
@@ -59,6 +52,10 @@ int main( int argc, char* argv[]){
 
 
     char command[MAX_CANON];
+
+    initShm(myKey);
+    initlicense(sharedHeap);
+    addtolicenses(sharedHeap, nValue);
 
     do{
         //We'll be using fgets() for our stdin. "testing.data" is what we will be receiving from.
@@ -111,9 +108,8 @@ int main( int argc, char* argv[]){
         }
     } /* END OF GETOPT */
 
-    addtolicenses(nValue);
     //creating child processes
-    createChildren( nValue );
+    createChildren(nValue);
 
     //detaching shared memory
 
@@ -169,30 +165,54 @@ void license_manager(const int i){
     //If there are 0 then we be blocking until it is ok to receive a license.
 
     //We'll be following Bakery's Algo for this one
+    int j;
 
-    do{
-        sharedHeap->choosing[i] = 1;
-        sharedHeap->number[i] = 1 + sharedHeap->number[max(sharedHeap->number, MAX_PROC)];
+    if( getlicense(sharedHeap) == 0 ) {
+        do {
+            sharedHeap->choosing[i] = 1;
+            sharedHeap->number[i] = 1 + sharedHeap->number[max(sharedHeap->number, MAX_PROC)];
+            sharedHeap->choosing[i] = 0;
+            for (j = 0; j < MAX_PROC; j++) {
+                printf("process %d is waiting...\n", i);
+                while (sharedHeap->choosing[j]);             //wait while someone is choosing
+                while ((sharedHeap->number[j]) &&
+                       (sharedHeap->number[j], j) < (sharedHeap->number[i], i));
+                sleep(1);
+            }
 
+            //critical section time!
+            critical_section();
+            printf("process %d received the license!\n", i);
+            sharedHeap->number[i] = 0;                      //giving up the number
 
-    }while(1);
-
-    if(getlicense() == 0){
-        printf("We have 0 license.\n");
-
+            //remainder section
+            returnlicense(sharedHeap);
+            printf("process %d returned the license!\n", i);
+            break;
+        } while (1);
+        return;
     } else {
-
+        printf("process %d received the license!\n", i);
+        sleep(1);
+        returnlicense(sharedHeap);
+        printf("process %d returned the license!\n", i);
+        return;
     }
+
 
 }
 
 void critical_section(){
-
+    if(getlicense(sharedHeap) == 0){
+        printf("We have 0 license.\n");
+    } else {
+        printf("We have our license!\n");
+    }
 }
 
 void createChildren( int children ){
-    int ticket = 0;
-    initlicense();
+    int myID = 0;
+
     while( (currentConcurrentProcesses <= MAX_PROC) && (totalProcessesCreated < children) ) {
 
         if ((childPid = fork()) == -1) {
@@ -206,16 +226,16 @@ void createChildren( int children ){
         currentConcurrentProcesses++;
         totalProcessesCreated++;
 
-        initShm(myKey);
 
         // made a child process!
         if (childPid == 0) {
             /* the child process */
+            myID = totalProcessesCreated % 20;
             printf("current concurrent process %d: myPID: %ld\n", currentConcurrentProcesses, (long) getpid());
             printf("number of children allowed to make: %d\n", children);
 
             //calling the license_manager to handle everything.
-            license_manager(totalProcessesCreated);
+            license_manager(myID);
 
             exit(EXIT_SUCCESS);
         } else {
