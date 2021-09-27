@@ -3,6 +3,8 @@
 #include "license.h"
 #include <stdlib.h>
 
+int nlicense;                   //This is license object. This is the critical section object
+
 int getlicense(void){
     //This function will detect the number of licenses available.
     //If there are no available licenses, it will block any processes from taking a license.
@@ -20,7 +22,7 @@ int returnlicense(void){
 }
 
 int initlicense(void){
-
+    int nlicense = 0;
 
     return 0;
 }

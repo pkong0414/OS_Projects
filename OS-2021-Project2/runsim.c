@@ -59,7 +59,6 @@ int main( int argc, char* argv[]){
 
 
     char command[MAX_CANON];
-    //*nlicense = 5;
 
     do{
         //We'll be using fgets() for our stdin. "testing.data" is what we will be receiving from.
@@ -112,7 +111,7 @@ int main( int argc, char* argv[]){
         }
     } /* END OF GETOPT */
 
-    int nlicense = nValue;
+    addtolicenses(nValue);
     //creating child processes
     createChildren( nValue );
 

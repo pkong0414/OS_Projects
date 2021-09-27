@@ -7,8 +7,6 @@
 #ifndef LICENSE_H
 #define LICENSE_H
 
-int nlicense;                   //This is license object. This is the critical section object
-
 // functions
 int getlicense(void);           //Blocks until a license is available
 int returnlicense(void);        //Increments the number of avail license object
