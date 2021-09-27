@@ -23,6 +23,8 @@ void docommand( const int i );                      //This function will manage 
 void critical_section();                            //This helper function will operate the critical section.
 void createChildren(int);                           //This function will create the children processes from main process
 void createGranChildren();                          //This function will be doing the exec functions.
+void parsingArgs(int argc, char** argv);            //This helper function will parse command line args.
+void signalHandler(int SIGNAL);                     //This is our signal handler
 int max(int numArr[], int n);
 
 /* THINGS TO DO:
@@ -64,42 +66,7 @@ int main( int argc, char* argv[]){
     // Getting a new line after reading file
     printf("\n");
 
-    while((opt = getopt(argc, argv, "hn:")) != -1) {
-        switch (opt) {
-            case 'h':
-                //This is the help parameter. We'll be printing out what this program does and will end the program.
-                //If this is entered along with others, we'll ignore the rest of the other parameters to print help
-                //and end the program accordingly.
-                printf("Usage: %s [-h] [-n processes(MAX 20)] < testing.data\n", argv[0]);
-                printf("This program is a license manager\n");
-                exit(EXIT_SUCCESS);
-            case 'n':
-                if (!isdigit(argv[2][0])) {
-                    //This case the user uses -t parameter but entered a string instead of an int.
-                    printf("value entered: %s\n", argv[2]);
-                    printf("%s: ERROR: -n <number of processes>\n", argv[0]);
-                    exit(EXIT_FAILURE);
-                } else {
-                    // -n gives us the number of licenses available
-                    nValue = atoi(optarg);
-                    // we will check to make sure nValue is 1 to 20.
-                    if (nValue < 1) {
-                        printf("%s: processes cannot be less than 1.\n", argv[0]);
-                        nValue = 1;
-                    }
-                    else if (nValue >= MAX_PROC) {
-                        printf("%s: 20 is the max number of process.\n", argv[0]);
-                        nValue = MAX_PROC-1;
-                    }
-                    printf("nValue: %d\n", nValue);
-                    break;
-                }
-            default: /* '?' */
-                printf("%s: ERROR: parameter not recognized.\n", argv[0]);
-                fprintf(stderr, "Usage: %s [-h] [-n number of processes]\n", argv[0]);
-                exit(EXIT_FAILURE);
-        }
-    } /* END OF GETOPT */
+    parsingArgs(argc, argv);
 
     // Parsing is finished, now we are allocating and adding to licenses
     initShm(myKey);
@@ -148,10 +115,7 @@ void initShm(key_t myKey){
         // attached shared memory
         printf("attached shared memory\n");
     }
-
-
     //****************** END SHARED MEMORY PORTION ***********************
-
 }
 
 void docommand(const int i){
@@ -160,7 +124,12 @@ void docommand(const int i){
 
     //We'll be following Bakery's Algo for this one
     int j;
+    int argumentC;
+    char **argumentV;
 
+    /* Usage: ./testsim [-s seconds for sleep] [-r number of repeats]
+     * We'll need to set up just like this
+    */
     if( getlicense(sharedHeap) == 1 ) {
         do {
             sharedHeap->choosing[i] = 1;
@@ -168,7 +137,7 @@ void docommand(const int i){
             sharedHeap->choosing[i] = 0;
             for (j = 0; j < MAX_PROC; j++) {
                 printf("process %d is waiting...\n", i);
-                while (sharedHeap->choosing[j]);             //wait while someone is choosing
+                while (sharedHeap->choosing[j]);                //wait while someone is choosing
                 while ((sharedHeap->number[j]) &&
                        (sharedHeap->number[j], j) < (sharedHeap->number[i], i));
                 sleep(1);
@@ -177,23 +146,16 @@ void docommand(const int i){
             //critical section time!
             critical_section();
             printf("process %d received the license!\n", i);
-            sharedHeap->number[i] = 0;                      //giving up the number
+            sharedHeap->number[i] = 0;                          //giving up the number
 
             //remainder section
-            returnlicense(sharedHeap);
-            printf("process %d returned the license!\n", i);
             break;
         } while (1);
         return;
     } else {
         printf("process %d received the license!\n", i);
-        sleep(1);
-        returnlicense(sharedHeap);
-        printf("process %d returned the license!\n", i);
         return;
     }
-
-
 }
 
 void critical_section(){
@@ -227,12 +189,13 @@ void createChildren( int children ){
             myID = totalProcessesCreated;                               //assuming at max I will create 20 procs for now
 
             //debugging output
-            printf("current concurrent process %d: myPID: %ld\n", currentConcurrentProcesses, (long) getpid());
+            printf("current concurrent process %d: myPID: %ld\n", currentConcurrentProcesses, (long)getpid());
             printf("number of children allowed to make: %d\n", children);
 
-            //calling the docommand to handle the licensing and bakery's algo.
+            //calling the docommand to handle the licensing.
             docommand(myID);
 
+            //exiting child process
             exit(EXIT_SUCCESS);
         } else {
             /* the parent process */
@@ -243,6 +206,7 @@ void createChildren( int children ){
             } else {
                 if( WIFEXITED(waitStatus) ) {
                     currentConcurrentProcesses--;
+                    returnlicense(sharedHeap);
                     printf("current concurrent process %d\n", currentConcurrentProcesses);
                     printf("Child process successfully exited with status: %d\n", waitStatus);
                 }
@@ -273,4 +237,43 @@ int max(int numArr[], int n)
 
     return max;
 
+}
+
+void parsingArgs(int argc, char** argv){
+    while((opt = getopt(argc, argv, "hn:")) != -1) {
+        switch (opt) {
+            case 'h':
+                //This is the help parameter. We'll be printing out what this program does and will end the program.
+                //If this is entered along with others, we'll ignore the rest of the other parameters to print help
+                //and end the program accordingly.
+                printf("Usage: %s [-h] [-n processes(MAX 20)] < testing.data\n", argv[0]);
+                printf("This program is a license manager\n");
+                exit(EXIT_SUCCESS);
+            case 'n':
+                if (!isdigit(argv[2][0])) {
+                    //This case the user uses -t parameter but entered a string instead of an int.
+                    printf("value entered: %s\n", argv[2]);
+                    printf("%s: ERROR: -n <number of processes>\n", argv[0]);
+                    exit(EXIT_FAILURE);
+                } else {
+                    // -n gives us the number of licenses available
+                    nValue = atoi(optarg);
+                    // we will check to make sure nValue is 1 to 20.
+                    if (nValue < 1) {
+                        printf("%s: processes cannot be less than 1.\n", argv[0]);
+                        nValue = 1;
+                    }
+                    else if (nValue >= MAX_PROC) {
+                        printf("%s: 20 is the max number of process.\n", argv[0]);
+                        nValue = MAX_PROC;
+                    }
+                    printf("nValue: %d\n", nValue);
+                    break;
+                }
+            default: /* '?' */
+                printf("%s: ERROR: parameter not recognized.\n", argv[0]);
+                fprintf(stderr, "Usage: %s [-h] [-n number of processes]\n", argv[0]);
+                exit(EXIT_FAILURE);
+        }
+    } /* END OF GETOPT */
 }

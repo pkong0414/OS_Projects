@@ -2,7 +2,9 @@
 
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <signal.h>
+#include <time.h>
 #include "config.h"
 
 #ifndef LICENSE_H
@@ -16,12 +18,13 @@ typedef struct sharedMemory {
 } sharedMem;
 
 // functions
-int getlicense(sharedMem *);           //Blocks until a license is available
-int returnlicense(sharedMem *);        //Increments the number of avail license object
-int initlicense(sharedMem *);          //Performs any needed initialization of the license object
-void addtolicenses(sharedMem *, int n);      //Adds n licenses to the number available
-void removelicenses(sharedMem *, int n);     //Decrements the number of licenses by n
-void logmsg(sharedMem *, const char* msg);   //Write the specified message to the log file.
+int getlicense(sharedMem *);                        //Blocks until a license is available
+int returnlicense(sharedMem *);                     //Increments the number of avail license object
+int initlicense(sharedMem *);                       //Performs any needed initialization of the license object
+void addtolicenses(sharedMem *, int n);             //Adds n licenses to the number available
+void removelicenses(sharedMem *, int n);            //Decrements the number of licenses by n
+void logmsg(const char* msg);                       //Write the specified message to the log file.
+char *getTime();                                    //Helper function to logmsg. It just returns time in a format
 
 /* NOTE: There is only one log file. This function will treat the log file as a critical resource.
  * It will open the file to append the message and close the file after appending the message.
