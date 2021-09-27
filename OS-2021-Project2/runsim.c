@@ -20,9 +20,11 @@
 // FUNCTION PROTOTYPES
 void docommand(char *);                             //This function will perform the exec calls
 void initShm(key_t myKey);                          //This function will initialize shared memory.
-void getShmKey();                                   //This will get us our shared memory key.
+void license_manager( const int i );                //this function will manage the giving and receiving of licenses.
+void critical_section();                            //This helper function will operate the critical section.
 void createChildren(int);                           //This function will create the children processes from main process
 void createGranChildren();                          //This function will be doing the exec functions.
+int max(int numArr[], int n);
 
 /* THINGS TO DO:
  *
@@ -34,12 +36,22 @@ void createGranChildren();                          //This function will be doin
  * NOTE: Both should detach memory and kill all the processes and end the program accordingly.
  */
 
+// shared memory struct
+typedef struct sharedMemory {
+    bool choosing[MAX_PROC];                            //This will be the queue for the processes.
+    int number[MAX_PROC];                           //This is the current turn of the waiting line.
+} sharedMem;
+
+
 // GLOBALS
+enum state{idle, want_in, in_cs};
 int opt, timer, nValue;                             //This is for managing our getopts
 int currentConcurrentProcesses = 1;                 //Initialized as 1 since the main program is also a process.
+int totalProcessesCreated = 0;                      //number of created process
 int childPid, id, waitStatus;                       //This is for managing our processes
 key_t myKey;                                        //Shared memory key
-sharedMem *sharedHeap;
+sharedMem *sharedHeap;                              //shared memory object
+
 
 int main( int argc, char* argv[]){
 
@@ -79,9 +91,9 @@ int main( int argc, char* argv[]){
                     printf("%s: ERROR: -n <number of processes>\n", argv[0]);
                     exit(EXIT_FAILURE);
                 } else {
-                    //-t is entered with an integer so we assign this to our timeValue.
+                    // -n gives us the number of licenses available
                     nValue = atoi(optarg);
-                    //timeValue cannot have a value of 0. This will prevent that case.
+                    // we will check to make sure nValue is 1 to 20.
                     if (nValue < 1) {
                         printf("%s: processes cannot be less than 1.\n", argv[0]);
                         nValue = 1;
@@ -100,8 +112,9 @@ int main( int argc, char* argv[]){
         }
     } /* END OF GETOPT */
 
+    int nlicense = nValue;
     //creating child processes
-    createChildren( 1 );
+    createChildren( nValue );
 
     //detaching shared memory
 
@@ -152,10 +165,36 @@ void initShm(key_t myKey){
 
 }
 
+void license_manager(const int i){
+    //This function will use getlicense() to gather an idea of how many nlicenses are around.
+    //If there are 0 then we be blocking until it is ok to receive a license.
+
+    //We'll be following Bakery's Algo for this one
+
+    do{
+        sharedHeap->choosing[i] = 1;
+        sharedHeap->number[i] = 1 + sharedHeap->number[max(sharedHeap->number, MAX_PROC)];
+
+
+    }while(1);
+
+    if(getlicense() == 0){
+        printf("We have 0 license.\n");
+
+    } else {
+
+    }
+
+}
+
+void critical_section(){
+
+}
+
 void createChildren( int children ){
-    int ticket;
-    //initlicense();
-    while( (currentConcurrentProcesses <= nValue) ) {
+    int ticket = 0;
+    initlicense();
+    while( (currentConcurrentProcesses <= MAX_PROC) && (totalProcessesCreated < children) ) {
 
         if ((childPid = fork()) == -1) {
             perror("Failed to create child process\n");
@@ -166,35 +205,57 @@ void createChildren( int children ){
         }
 
         currentConcurrentProcesses++;
-        children--;
+        totalProcessesCreated++;
 
         initShm(myKey);
 
         // made a child process!
         if (childPid == 0) {
             /* the child process */
-            int myId = children;                   //This will be its index in the queue line.
-            printf("ChildProcess %d: myPID: %ld\n", currentConcurrentProcesses, (long) getpid());
+            printf("current concurrent process %d: myPID: %ld\n", currentConcurrentProcesses, (long) getpid());
             printf("number of children allowed to make: %d\n", children);
+
+            //calling the license_manager to handle everything.
+            license_manager(totalProcessesCreated);
+
             exit(EXIT_SUCCESS);
         } else {
             /* the parent process */
 
             // waiting for the child process
-            if ((waitStatus = wait(NULL)) == -1) {
+            if ((childPid = waitpid(childPid, &waitStatus, WNOHANG)) == -1) {
                 perror("Failed to wait for child\n");
             } else {
-                printf("successfully waited for child process!\n");
+                if( WIFEXITED(waitStatus) ) {
+                    currentConcurrentProcesses--;
+                    printf("current concurrent process %d\n", currentConcurrentProcesses);
+                    printf("Child process successfully exited with status: %d\n", waitStatus);
+                }
             }
-
-            if( children == 0 ){
+            printf("total processes created: %d\n", totalProcessesCreated);
+            if( children == totalProcessesCreated ){
                 break;
             }
         }
+
     }
 
 }
 
 void createGrandChildren(){
+
+}
+
+int max(int numArr[], int n)
+{
+    static int max=0;
+    int i = 0;
+    for(i; i < n; i++) {
+        if(numArr[max] < numArr[i]) {
+            max=i;
+        }
+    }
+
+    return max;
 
 }

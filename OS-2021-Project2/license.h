@@ -7,13 +7,7 @@
 #ifndef LICENSE_H
 #define LICENSE_H
 
-typedef struct sharedMemory {
-    int waitQueue[MAX_PROC];    //This will be the queue for the processes
-    sig_atomic_t ready;         //This is the active processes
-    int nlicense;               //This is license object. This is the critical section object
-} sharedMem;
-
-extern sharedMem *sharedHeap;
+int nlicense;                   //This is license object. This is the critical section object
 
 // functions
 int getlicense(void);           //Blocks until a license is available
