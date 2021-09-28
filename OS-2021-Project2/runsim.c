@@ -11,6 +11,7 @@
 #include <sys/shm.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <sys/time.h>
 #include "detachandremove.h"
 #include "license.h"
 #define PERM (IPC_CREAT | S_IRUSR | S_IWUSR)
@@ -23,18 +24,25 @@ void docommand( const int i );                      //This function will manage 
 void critical_section();                            //This helper function will operate the critical section.
 void createChildren(int);                           //This function will create the children processes from main process
 void createGranChildren();                          //This function will be doing the exec functions.
-void parsingArgs(int argc, char** argv);            //This helper function will parse command line args.
+void parsingArgs(int argc, char* argv[]);            //This helper function will parse command line args.
 void signalHandler(int SIGNAL);                     //This is our signal handler
-int max(int numArr[], int n);
+int max(int numArr[], int n);                       //A function to find our max number in the arrays
+
+// SIGNAL HANDLERS PROTOTYPES
+static void myhandler(int SIGNAL);
+static void myKillSignalHandler(int SIGNAL);
+static int setupUserInterrupt(void);
+static int setupinterrupt(void);
+static int setupitimer(int TIMER);
 
 /* THINGS TO DO:
  *
- * We need a signal interrupt [ctrl+c]
+ *  We need to consider the case that maybe the file being read gives us more than 20 processes to exec.
+ *  This means we should keep the currentConcurrentProcesses to 20 at max (or less).
  *
- * We also need to program a program timer. Default value is 100. Once the time is up,
- * the whole program shuts off no matter what
- *
- * NOTE: Both should detach memory and kill all the processes and end the program accordingly.
+ *  We also need to rewrite the way we do our critical section. It seems that the whole bit will be on the
+ *  getlicense(). Also we need to write logmsg() to also consider critical section since we want all data written
+ *  in the order it was processed.
  */
 
 // GLOBALS
@@ -42,15 +50,20 @@ enum state{idle, want_in, in_cs};
 int opt, timer, nValue;                             //This is for managing our getopts
 int currentConcurrentProcesses = 1;                 //Initialized as 1 since the main program is also a process.
 int totalProcessesCreated = 0;                      //number of created process
-int childPid, id, waitStatus;                       //This is for managing our processes
+int childPid, waitStatus;                           //This is for managing our processes
 key_t myKey;                                        //Shared memory key
+int shmID;                                          //shared memoryID
 sharedMem *sharedHeap;                              //shared memory object
-
 
 int main( int argc, char* argv[]){
     //gonna make a signal interrupt here just to see what happens
 
     char command[MAX_CANON];
+    timer = MAX_SECONDS;
+    if( setupUserInterrupt() == -1 ){
+        perror( "failed to set up a user kill signal.\n");
+        return 1;
+    }
 
     do{
         //We'll be using fgets() for our stdin. "testing.data" is what we will be receiving from.
@@ -68,6 +81,17 @@ int main( int argc, char* argv[]){
 
     parsingArgs(argc, argv);
 
+    //setting up interrupts for the timer. We have 100 seconds.
+    if (setupinterrupt() == -1) {
+        perror("Failed to set up handler for SIGALRM");
+        return 1;
+    }
+
+    if (setupitimer(timer) == -1) {
+        perror("Failed to set up the ITIMER_PROF interval timer");
+        return 1;
+    }
+
     // Parsing is finished, now we are allocating and adding to licenses
     initShm(myKey);
     initlicense(sharedHeap);
@@ -78,7 +102,7 @@ int main( int argc, char* argv[]){
 
     //detaching shared memory
 
-    if(detachandremove(id, sharedHeap) == -1){
+    if(detachandremove(shmID, sharedHeap) == -1){
         perror("Failed to destroy shared memory segment");
         exit(EXIT_FAILURE);
     } else {
@@ -98,16 +122,16 @@ void initShm(key_t myKey){
     }
     printf("derived key from, myKey: %d\n", myKey);
 
-    if( (id = shmget(myKey, sizeof(sharedMem), PERM)) == -1){
+    if( (shmID = shmget(myKey, sizeof(sharedMem), PERM)) == -1){
         perror("Failed to create shared memory segment\n");
         exit(EXIT_FAILURE);
     } else {
         // created shared memory segment!
         printf("created shared memory!\n");
 
-        if ((sharedHeap = (sharedMem *) shmat(id, NULL, 0)) == (void *) -1) {
+        if ((sharedHeap = (sharedMem *) shmat(shmID, NULL, 0)) == (void *) -1) {
             perror("Failed to attach shared memory segment\n");
-            if (shmctl(id, IPC_RMID, NULL) == -1) {
+            if (shmctl(shmID, IPC_RMID, NULL) == -1) {
                 perror("Failed to remove memory segment\n");
             }
             exit(EXIT_FAILURE);
@@ -173,7 +197,7 @@ void createChildren( int children ){
 
         if ((childPid = fork()) == -1) {
             perror("Failed to create child process\n");
-            if (detachandremove(id, sharedHeap) == -1) {
+            if (detachandremove(shmID, sharedHeap) == -1) {
                 perror("Failed to destroy shared memory segment");
             }
             exit(EXIT_FAILURE);
@@ -234,12 +258,10 @@ int max(int numArr[], int n)
             max=i;
         }
     }
-
     return max;
-
 }
 
-void parsingArgs(int argc, char** argv){
+void parsingArgs(int argc, char* argv[]){
     while((opt = getopt(argc, argv, "hn:")) != -1) {
         switch (opt) {
             case 'h':
@@ -276,4 +298,74 @@ void parsingArgs(int argc, char** argv){
                 exit(EXIT_FAILURE);
         }
     } /* END OF GETOPT */
+}
+
+static void myhandler(int SIGNAL) {
+    char timeout[] = "timing out processes.\n";
+    int timeoutSize = sizeof( timeout );
+    int errsave;
+
+    errsave = errno;
+    write(STDERR_FILENO, timeout, timeoutSize );
+    errno = errsave;
+    int i;
+
+    //waiting for max amount of children to terminate
+    for (i = 0; i <= nValue ; ++i) {
+        wait(NULL);
+    }
+    //detaching shared memory
+    if (detachandremove(shmID, sharedHeap) == -1) {
+        perror("failed to destroy shared memory segment\n");
+        exit(0);
+    } else {
+        printf("destroyed shared memory segment\n");
+    }
+    exit(0);
+}
+
+static void myKillSignalHandler(int SIGNAL){
+    char timeout[] = "caught ctrl+c, ending processes.\n";
+    int timeoutSize = sizeof( timeout );
+    int errsave;
+
+    errsave = errno;
+    write(STDERR_FILENO, timeout, timeoutSize );
+    errno = errsave;
+    int i;
+
+    //waiting for max amount of children to terminate
+    for (i = 0; i <= nValue ; ++i) {
+        wait(NULL);
+    }
+    //detaching shared memory
+    if (detachandremove(shmID, sharedHeap) == -1) {
+        perror("failed to destroy shared memory segment\n");
+        exit(0);
+    } else {
+        printf("destroyed shared memory segment\n");
+    }
+    exit(0);
+}
+
+static int setupUserInterrupt( void ){
+    struct sigaction act;
+    act.sa_handler = myKillSignalHandler;
+    act.sa_flags = 0;
+    return (sigemptyset(&act.sa_mask) || sigaction(SIGINT, &act, NULL));
+}
+
+static int setupinterrupt( void ){
+    struct sigaction act;
+    act.sa_handler = myhandler;
+    act.sa_flags = 0;
+    return (sigemptyset(&act.sa_mask) || sigaction(SIGALRM, &act, NULL));
+}
+
+static int setupitimer(int TIMER) {
+    struct itimerval value;
+    value.it_interval.tv_sec = TIMER;
+    value.it_interval.tv_usec = 0;
+    value.it_value = value.it_interval;
+    return (setitimer( ITIMER_REAL, &value, NULL));
 }

@@ -4,8 +4,8 @@
 
 int getlicense(sharedMem* sharedHeap){
     //This function will detect the number of licenses available.
-    //If there are no available licenses, it will block any processes from taking a license.
     if( sharedHeap->nlicense == 0 ){
+        //If there are no available licenses, it will block any processes from taking a license.
         return 1;
     } else {
         //we have licenses now.

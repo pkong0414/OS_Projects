@@ -5,18 +5,46 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <signal.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/stat.h>
 #include "license.h"
+#define PERM (IPC_CREAT | S_IRUSR | S_IWUSR)
 
-void parsingArgs(int argc, char** argv);                        //Function for parsing arguments
+// FUNCTION PROTOTYPES
+void parsingArgs(int argc, char* argv[]);                        //Function for parsing arguments
+void initShm(key_t myKey);                                      //Function to init shared memory
 
-int opt, sleepValue, repeatFactor;
+// SIGNAL HANDLER PROTOTYPES
+static void myKillSignalHandler(int SIGNAL);
+static int setupUserInterrupt( void );
+
+int opt, sleepValue, repeatFactor;                              //globals for opt parameters
+key_t myKey;                                                    //Shared memory key
+int shmID;                                                      //shared memoryID
+sharedMem *sharedHeap;                                          //shared memory object
+
+/*  THINGS TO DO
+ *  We need to write the way we load up the message in the manner is required.
+ *
+ */
+
 
 int main(int argc, char* argv){
+
+    if( setupUserInterrupt() == -1 ){
+        perror( "failed to set up a user kill signal.\n");
+        return 1;
+    }
     parsingArgs(argc, argv);
+    initShm(myKey);
+
+
     return 0;
 }
 
-void parsingArgs(int argc, char** argv){
+void parsingArgs(int argc, char* argv[]){
     while((opt = getopt(argc, argv, "s:r:")) != -1) {
         switch (opt) {
             case 's':
@@ -51,4 +79,53 @@ void parsingArgs(int argc, char** argv){
                 exit(EXIT_FAILURE);
         }
     } /* END OF GETOPT */
+}
+
+void initShm(key_t myKey){
+    //********************* SHARED MEMORY PORTION ************************
+
+    if((myKey = ftok(".",1)) == (key_t)-1){
+        //if we fail to get our key.
+        fprintf(stderr, "Failed to derive key from filename:\n");
+        exit(EXIT_FAILURE);
+    }
+    printf("derived key from, myKey: %d\n", myKey);
+
+    if( (shmID = shmget(myKey, sizeof(sharedMem), PERM)) == -1){
+        perror("Failed to create shared memory segment\n");
+        exit(EXIT_FAILURE);
+    } else {
+        // created shared memory segment!
+        printf("created shared memory!\n");
+
+        if ((sharedHeap = (sharedMem *) shmat(shmID, NULL, 0)) == (void *) -1) {
+            perror("Failed to attach shared memory segment\n");
+            if (shmctl(shmID, IPC_RMID, NULL) == -1) {
+                perror("Failed to remove memory segment\n");
+            }
+            exit(EXIT_FAILURE);
+        }
+        // attached shared memory
+        printf("attached shared memory\n");
+    }
+    //****************** END SHARED MEMORY PORTION ***********************
+}
+
+static void myKillSignalHandler(int SIGNAL){
+    char timeout[] = "caught ctrl+c, ending processes.\n";
+    int timeoutSize = sizeof( timeout );
+    int errsave;
+
+    errsave = errno;
+    write(STDERR_FILENO, timeout, timeoutSize );
+    errno = errsave;
+
+    exit(EXIT_SUCCESS);
+}
+
+static int setupUserInterrupt( void ){
+    struct sigaction act;
+    act.sa_handler = myKillSignalHandler;
+    act.sa_flags = 0;
+    return (sigemptyset(&act.sa_mask) || sigaction(SIGINT, &act, NULL));
 }
